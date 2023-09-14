@@ -1,7 +1,19 @@
+#views
+#views.py
 from django.shortcuts import render,HttpResponse,redirect
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate,login,logout
 from django.contrib.auth.decorators import login_required
+import os
+import cv2
+import numpy as np
+import keras
+from django.conf import settings
+from django.core.files.storage import FileSystemStorage
+import tensorflow_addons as tfa
+import tensorflow as tf
+model = tf.keras.models.load_model('./app1/BT_CNN_model7', custom_objects={'F1Score': tfa.metrics.F1Score})
+ci=['glioma','meningioma','no-tumor','pituitary']
 # Create your views here.
 
 from django.shortcuts import render, redirect
@@ -13,17 +25,34 @@ def HomePage(request):
     if request.method == 'POST':
         # Check if the form is valid (i.e., an image is uploaded)
         if 'image' in request.FILES:
-            # Get the uploaded image and username from the form
             uploaded_image = request.FILES['image']
-            username = request.user.username  # Get the current user's username
+            # username = request.user.username
+            # mri_image = MRIImage.objects.create(image=uploaded_image, username=username)
+            # request.session['username'] = username
 
-            # Save the image and username to the database
-            mri_image = MRIImage.objects.create(image=uploaded_image, username=username)
+            # Perform image prediction
+            fs = FileSystemStorage(location=settings.MEDIA_ROOT)
 
-            # Optionally, you can perform some additional actions or redirect the user to another page
-            return render (request,'upload.html')  # Replace 'success_url' with the URL you want to redirect to after successful upload
+            # Save the file to disk
+            filename = fs.save(uploaded_image.name, uploaded_image)
+
+            # Get the file path
+            image_path = fs.path(filename)
+            
+            image = cv2.imread(image_path)
+            image = cv2.resize(image, (176, 176))
+            image = image / 255.0
+            image = np.expand_dims(image, axis=0)
+            
+            prediction = model.predict(image)
+            predicted_class_index = np.argmax(prediction[0])
+            predicted_class = ci[predicted_class_index]
+            if predicted_class != None:
+                return render(request, 'home.html', {'predicted_class': predicted_class})
+
 
     return render(request,'home.html')
+
 
 def SignupPage(request):
     if request.method=='POST':
